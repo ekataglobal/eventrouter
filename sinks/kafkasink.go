@@ -18,10 +18,22 @@ package sinks
 
 import (
 	"encoding/json"
+
 	"github.com/Shopify/sarama"
+	"github.com/ekataglobal/eventrouter/util"
 	"github.com/golang/glog"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
+
+// KafkaConfig holds the configuration for a Kafka sink
+type KafkaConfig struct {
+	Brokers  []string        `yaml:"brokers"`
+	Topic    string          `yaml:"topic"`
+	Async    bool            `yaml:"async"`
+	RetryMax int             `yaml:"retryMax"`
+	SASL     util.SaslConfig `yaml:"sasl"`
+	TLS      util.TLSConfig  `yaml:"tls"`
+}
 
 // KafkaSink implements the EventSinkInterface
 type KafkaSink struct {
@@ -29,38 +41,45 @@ type KafkaSink struct {
 	producer interface{}
 }
 
-// NewKafkaSinkSink will create a new KafkaSink with default options, returned as an EventSinkInterface
-func NewKafkaSink(brokers []string, topic string, async bool, retryMax int, saslUser string, saslPwd string) (EventSinkInterface, error) {
+// NewKafkaSink will create a new KafkaSink with default options, returned as an EventSinkInterface
+func NewKafkaSink(conf KafkaConfig) (EventSinkInterface, error) {
 
-	p, err := sinkFactory(brokers, async, retryMax, saslUser, saslPwd)
+	p, err := sinkFactory(conf)
 
 	if err != nil {
 		return nil, err
 	}
 
 	return &KafkaSink{
-		Topic:    topic,
+		Topic:    conf.Topic,
 		producer: p,
 	}, err
 }
 
-func sinkFactory(brokers []string, async bool, retryMax int, saslUser string, saslPwd string) (interface{}, error) {
+func sinkFactory(conf KafkaConfig) (interface{}, error) {
 	config := sarama.NewConfig()
-	config.Producer.Retry.Max = retryMax
+	config.Producer.Retry.Max = conf.RetryMax
 	config.Producer.RequiredAcks = sarama.WaitForAll
 
-	if saslUser != "" && saslPwd != "" {
-		config.Net.SASL.Enable = true
-		config.Net.SASL.User = saslUser
-		config.Net.SASL.Password = saslPwd
+	if conf.SASL.Enabled {
+		conf.SASL.Apply(config)
 	}
 
-	if async {
-		return sarama.NewAsyncProducer(brokers, config)
+	if conf.TLS.Enabled {
+		config.Net.TLS.Enable = true
+		tlsConfig, err := conf.TLS.Get()
+		if err != nil {
+			return nil, err
+		}
+		config.Net.TLS.Config = tlsConfig
+	}
+
+	if conf.Async {
+		return sarama.NewAsyncProducer(conf.Brokers, config)
 	}
 
 	config.Producer.Return.Successes = true
-	return sarama.NewSyncProducer(brokers, config)
+	return sarama.NewSyncProducer(conf.Brokers, config)
 
 }
 

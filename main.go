@@ -66,14 +66,14 @@ func loadConfig() kubernetes.Interface {
 
 	// leverages a file|(ConfigMap)
 	// to be located at /etc/eventrouter/config
-	viper.SetConfigType("json")
+	viper.SetConfigType("yaml")
 	viper.SetConfigName("config")
 	viper.AddConfigPath("/etc/eventrouter/")
 	viper.AddConfigPath(".")
 	viper.SetDefault("kubeconfig", "")
 	viper.SetDefault("sink", "glog")
-	viper.SetDefault("resync-interval", time.Minute*30)
-	viper.SetDefault("enable-prometheus", true)
+	viper.SetDefault("resync_interval", time.Minute*30)
+	viper.SetDefault("prometheus_enabled", true)
 	if err = viper.ReadInConfig(); err != nil {
 		panic(err.Error())
 	}
@@ -107,7 +107,7 @@ func main() {
 	var wg sync.WaitGroup
 
 	clientset := loadConfig()
-	sharedInformers := informers.NewSharedInformerFactory(clientset, viper.GetDuration("resync-interval"))
+	sharedInformers := informers.NewSharedInformerFactory(clientset, viper.GetDuration("resync_interval"))
 	eventsInformer := sharedInformers.Core().V1().Events()
 
 	// TODO: Support locking for HA https://github.com/kubernetes/kubernetes/pull/42666
@@ -115,7 +115,7 @@ func main() {
 	stop := sigHandler()
 
 	// Startup the http listener for Prometheus Metrics endpoint.
-	if viper.GetBool("enable-prometheus") {
+	if viper.GetBool("prometheus_enabled") {
 		go func() {
 			glog.Info("Starting prometheus metrics.")
 			http.Handle("/metrics", promhttp.Handler())

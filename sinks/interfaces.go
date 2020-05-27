@@ -19,6 +19,8 @@ package sinks
 import (
 	"errors"
 
+	"github.com/ekataglobal/eventrouter/util"
+
 	"github.com/golang/glog"
 	"github.com/spf13/viper"
 	v1 "k8s.io/api/core/v1"
@@ -59,21 +61,31 @@ func ManufactureSink() (e EventSinkInterface) {
 		go h.Run(make(chan bool))
 		return h
 	case "kafka":
-		viper.SetDefault("kafkaBrokers", []string{"kafka:9092"})
-		viper.SetDefault("kafkaTopic", "eventrouter")
-		viper.SetDefault("kafkaAsync", true)
-		viper.SetDefault("kafkaRetryMax", 5)
-		viper.SetDefault("kafkaSaslUser", "")
-		viper.SetDefault("kafkaSaslPwd", "")
+		kafkaConfig := KafkaConfig{
+			Brokers:  []string{"localhost:9092"},
+			Topic:    "eventrouter",
+			Async:    true,
+			RetryMax: 5,
+			SASL: util.SaslConfig{
+				Enabled:   false,
+				Mechanism: "",
+				User:      "",
+				Password:  "",
+			},
+			TLS: util.TLSConfig{
+				Enabled:     false,
+				RootCAFiles: []string{""},
+				CertFile:    "",
+				KeyFile:     "",
+			},
+		}
 
-		brokers := viper.GetStringSlice("kafkaBrokers")
-		topic := viper.GetString("kafkaTopic")
-		async := viper.GetBool("kakfkaAsync")
-		retryMax := viper.GetInt("kafkaRetryMax")
-		saslUser := viper.GetString("kafkaSaslUser")
-		saslPwd := viper.GetString("kafkaSaslPwd")
+		cfg := viper.Sub("kafka")
+		if err := cfg.Unmarshal(&kafkaConfig); err != nil {
+			panic(err.Error())
+		}
 
-		e, err := NewKafkaSink(brokers, topic, async, retryMax, saslUser, saslPwd)
+		e, err := NewKafkaSink(kafkaConfig)
 		if err != nil {
 			panic(err.Error())
 		}
